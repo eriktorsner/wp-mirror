@@ -12,16 +12,23 @@ class Remote
 
     /**
      * Remote constructor.
-     * @param $ftpSettings
+     *
+     * @param Settings $remoteSettings
      */
     public function __construct($remoteSettings)
     {
         $this->remoteSettings = $remoteSettings;
 
+        $this->baseUrl = rtrim($this->remoteSettings->url, '/') . '/';
+        $this->baseUrl = $this->properUrl($this->baseUrl);
+
+
         $this->maxFiles = 100;
         if (isset($remoteSettings->maxFiles)) {
             $this->maxFiles = $remoteSettings->maxFiles;
         }
+
+        $this->initiateRemoteSession();
     }
 
     /**
@@ -29,23 +36,7 @@ class Remote
      */
     public function remoteScan()
     {
-        $baseUrl = rtrim($this->remoteSettings->url, '/') . '/';
-        $baseUrl = $this->properUrl($baseUrl);
-
-        // 1. Get a seed
-        $url = $baseUrl . '?wpmirroragent_token=nosession';
-        $url .= '&wpmirroragent_action=seed';
-
-        $strResponse = file_get_contents($url);
-        $response = json_decode($strResponse);
-        if (!$response) {
-            // log and exit
-        }
-        $this->seed = $response->seed;
-
-        // 2. Get the file index
-        $url = $baseUrl . '?wpmirroragent_token=' . $this->calcRemoteToken('fileindex');
-        $url .= '&wpmirroragent_action=fileindex';
+        $url = $this->getUrl('fileindex');
         $strResponse = file_get_contents($url);
 
         return $strResponse;
@@ -64,7 +55,6 @@ class Remote
         if (count($changeSet) == 0) {
             return json_decode('{"messages":[]}');
         }
-echo "1\n";
         $files = array();
         foreach ($changeSet as $change) {
             $files[] = $change['file'];
@@ -78,13 +68,34 @@ echo "1\n";
         }
     }
 
+    /**
+     *
+     */
+    public function getDatabase()
+    {
+        // Get the table index
+        $url = $url = $this->getUrl('tableindex');
+        $strResponse = file_get_contents($url);
+        $arrTables = explode("\n", $strResponse);
+
+        foreach ($arrTables as $table) {
+            if (strlen($table) == 0) {
+                continue;
+            }
+            $url = $this->getUrl('packtable');
+            $url .= '&table=' . $table;
+            $target = tempnam('', 'mirror_');
+            file_put_contents($target, fopen($url, 'rb'));
+
+            $this->unpackTableZip($table, $target);
+        }
+    }
+
     private function getFilesSubset($files)
     {
         // ask to pack the files
-        $baseUrl = rtrim($this->remoteSettings->url, '/') . '/';
-        $baseUrl = $this->properUrl($baseUrl);
-        $url = $baseUrl . '?wpmirroragent_token=' . $this->calcRemoteToken('fileindex');
-        $url .= '&wpmirroragent_action=pack';
+
+        $url = $this->getUrl('pack');
         $params = array('http' => array(
                 'method' => 'POST',
                 'header' => 'Content-type: application/json',
@@ -93,19 +104,17 @@ echo "1\n";
         );
         $ctx = stream_context_create($params);
 
-        echo "url: $url \n";
         // download the zip
         $target = tempnam('', 'mirror_');
         file_put_contents($target, fopen($url, 'rb', false, $ctx));
-        echo $target . "\n";
 
         // unpack the file
-        $this->unpackZip($target);
-        //unlink($target);
+        $this->unpackFilesZip($target);
+        unlink($target);
 
     }
 
-    private function unpackZip($fileName)
+    private function unpackFilesZip($fileName)
     {
         $zip = new \ZipArchive();
         $zip->open($fileName);
@@ -121,6 +130,25 @@ echo "1\n";
         $zip->close();
     }
 
+    private function unpackTableZip($table, $fileName)
+    {
+        $zip = new \ZipArchive();
+        $zip->open($fileName);
+
+        $mysqli = new \mysqli(
+            $this->remoteSettings->localdbhost,
+            $this->remoteSettings->localdbuser,
+            $this->remoteSettings->localdbpass,
+            $this->remoteSettings->localdbname
+        );
+
+        $sql = 'DROP TABLE IF EXISTS ' . $table;
+        $mysqli->query($sql);
+
+        $sql = $zip->getFromIndex(0);
+        $mysqli->multi_query($sql);
+    }
+
     public function cleanUp()
     {
     }
@@ -131,7 +159,7 @@ echo "1\n";
      * @param string $url
      * @return string
      */
-    private function properUrl($url)
+    public function properUrl($url)
     {
         if (substr($url, 0, 4) != 'http') {
             $url = 'http://'. $url;
@@ -140,8 +168,23 @@ echo "1\n";
         return $url;
     }
 
-    private function calcRemoteToken($command)
+    private function initiateRemoteSession()
     {
-        return sha1($this->seed . $this->remoteSettings->secret . $command);
+        $url = $this->baseUrl . '?wpmirroragent_token=nosession';
+        $url .= '&wpmirroragent_action=seed';
+        $strResponse = file_get_contents($url);
+        $response = json_decode($strResponse);
+        if (!$response) {
+            // log and exit
+        }
+        $this->seed = $response->seed;
+    }
+
+    private function getUrl($command)
+    {
+        $url = $this->baseUrl;
+        $url .= '?wpmirroragent_token=' . sha1($this->seed . $this->remoteSettings->secret . $command);
+        $url .= '&wpmirroragent_action=' . $command;
+        return $url;
     }
 }

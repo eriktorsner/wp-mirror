@@ -45,6 +45,21 @@ class Mirror
         $this->utils = new Utils();
         $this->remote = new Remote($this->remoteSettings);
 
+        $this->mirrorFiles();
+        $this->rewriteWpConfig();
+        $this->mirrorDb();
+        $this->rewriteDb();
+
+        // Grab another local snapshot
+        $this->currentLocalState = $this->utils->localScan($this->remoteSettings->localpath);
+        $this->saveState();
+
+        // if all went well (how do we know?), we're still here... so save state
+        $this->remote->cleanUp();
+    }
+
+    private function mirrorFiles()
+    {
         $this->stateFolder = BASEPATH . '/wpmirror';
         if (isset($this->remoteSettings->stateFolder)) {
             $this->stateFolder = $this->remoteSettings->stateFolder;
@@ -66,18 +81,47 @@ class Mirror
             }
         }
 
-        echo count($remoteChanges) . "\n";
-
         // Get the changes from the remote server:
-        $status = $this->remote->getFiles($remoteChanges);
+        $this->remote->getFiles($remoteChanges);
 
-        $this->remote->cleanUp();
-        // ...grab another local snapshot
-        $this->currentLocalState = $this->utils->localScan($this->remoteSettings->localpath);
+    }
 
-        // if all went well (how do we know?), we're still here... so save state
-        $this->remote->cleanUp();
-        $this->saveState();
+    private function mirrorDb()
+    {
+        // get the db tables...
+        $this->remote->getDatabase();
+    }
+
+    private function rewriteWpConfig()
+    {
+        $wpConfig = $this->remoteSettings->localpath . '/wp-config.php';
+        if (file_exists($wpConfig)) {
+            unlink($wpConfig);
+        }
+
+        $wpcmd = $this->getWpCommand();
+
+        $cmd = $wpcmd.sprintf(
+            'core config --dbhost=%s --dbname=%s --dbuser=%s --dbpass=%s --quiet',
+            $this->remoteSettings->localdbhost,
+            $this->remoteSettings->localdbname,
+            $this->remoteSettings->localdbuser,
+            $this->remoteSettings->localdbpass
+        );
+        exec($cmd);
+    }
+
+    private function rewriteDb()
+    {
+        $wpcmd = $this->getWpCommand();
+
+        $remote = $this->remote->properUrl($this->remoteSettings->url);
+        $local  = $this->remote->properUrl($this->remoteSettings->localurl);
+        $cmd = $wpcmd.sprintf(
+            'search-replace %s %s --skip-columns=guid',
+            $remote,
+            $local
+        );
     }
 
     /**
@@ -171,5 +215,17 @@ class Mirror
         }
 
         return $changeSet;
+    }
+
+    /**
+     * Returns the wp-cli command with correct path
+     *
+     * @return string
+     */
+    public function getWpCommand()
+    {
+        $wpcmd = 'wp --path='.$this->remoteSettings->localpath.' --allow-root ';
+
+        return $wpcmd;
     }
 }
