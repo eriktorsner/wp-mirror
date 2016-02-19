@@ -1,0 +1,30 @@
+{
+  "name": "eriktorsner/wp-deployhelper",
+  "description": "A small util for mirroring WordPress to the local file system.",
+  "type": "library",
+  "keywords": [
+    "wordpress", "mirror"
+  ],
+  "homepage": "https://github.com/eriktorsner/wp-mirror/",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Erik Torsner",
+      "email": "erik@torgesta.com",
+      "role": "lead"
+    }
+  ],
+  "support": {
+    "issues": "https://github.com/eriktorsner/wp-mirror/issues"
+  },
+  "require": {
+    "php": ">=5.3.3"
+  },
+  "autoload": {
+    "psr-4": {
+      "Wpmirror\\": "src"
+    }
+  },
+
+  "bin": ["bin/wp-mirror"]
+}

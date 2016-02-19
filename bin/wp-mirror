@@ -1,0 +1,22 @@
+#!/usr/bin/env php
+<?php
+
+define('BASEPATH', getcwd());
+require_once BASEPATH . '/vendor/autoload.php';
+
+use Wpmirror\Mirror;
+
+if (count($argv) < 2) {
+    die("At least one argument expected\n");
+}
+
+switch ($argv[1]) {
+    case 'wp-mirror':
+        $mirror= new Mirror();
+        $mirror->mirror();
+        break;
+    default:
+        die("Command {$argv[1]} not recognized\n");
+}
+
+echo "Peak memory: " . (int)(memory_get_peak_usage() / 1024) . "Kb \n";
