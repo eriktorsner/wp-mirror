@@ -1,5 +1,5 @@
 {
-  "name": "eriktorsner/wp-deployhelper",
+  "name": "eriktorsner/wp-mirror",
   "description": "A small util for mirroring WordPress to the local file system.",
   "type": "library",
   "keywords": [
