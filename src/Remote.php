@@ -8,7 +8,20 @@ namespace Wpmirror;
  */
 class Remote
 {
+    /**
+     * @var Settings
+     */
     private $remoteSettings;
+
+    /**
+     * @var int
+     */
+    private $seed;
+
+    /**
+     * @var string
+     */
+    private $remoteAbsPath;
 
     /**
      * Remote constructor.
@@ -68,6 +81,15 @@ class Remote
         }
     }
 
+    public function cleanUp()
+    {
+    }
+
+    public function getRemoteAbsPath()
+    {
+        return $this->remoteAbsPath;
+    }
+
     /**
      *
      */
@@ -119,6 +141,9 @@ class Remote
         $zip = new \ZipArchive();
         $zip->open($fileName);
         $base = $this->remoteSettings->localpath;
+        $baseTrailing = rtrim($base, '/') . '/';
+        $localUrl = rtrim($this->remoteSettings->localurl, '/') . '/';
+        $localUrl = $this->properUrl($localUrl);
 
         for ($i = 0; $i<$zip->numFiles; $i++) {
             $file = $zip->getNameIndex($i);
@@ -126,8 +151,25 @@ class Remote
             if (!$success) {
                 //$ret->messages[] = "file $file could not be extracted";
             }
+
+            if ($success) {
+                $info = pathinfo($file);
+                if (!in_array($info['extension'], array('php', 'json', 'js', 'txt', 'html'))) {
+                    continue;
+                }
+                // check if the file has an internal (hardcoded reference to the
+                // remote URL or remote abspath
+                $this->searchReplace($base . '/' . $file, $this->remoteAbsPath, $baseTrailing);
+                $this->searchReplace($base . '/' . $file, $this->baseUrl, $localUrl);
+            }
+
         }
         $zip->close();
+    }
+
+    private function searchReplace($file, $search, $replace)
+    {
+        file_put_contents($file, str_replace($search, $replace, file_get_contents($file)));
     }
 
     private function unpackTableZip($table, $fileName)
@@ -147,10 +189,6 @@ class Remote
 
         $sql = $zip->getFromIndex(0);
         $mysqli->multi_query($sql);
-    }
-
-    public function cleanUp()
-    {
     }
 
     /**
@@ -178,6 +216,7 @@ class Remote
             // log and exit
         }
         $this->seed = $response->seed;
+        $this->remoteAbsPath = $response->abspath;
     }
 
     private function getUrl($command)
