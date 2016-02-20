@@ -103,10 +103,10 @@ class Mirror
 
         $cmd = $wpcmd.sprintf(
             'core config --dbhost=%s --dbname=%s --dbuser=%s --dbpass=%s --quiet',
-            $this->remoteSettings->localdbhost,
-            $this->remoteSettings->localdbname,
-            $this->remoteSettings->localdbuser,
-            $this->remoteSettings->localdbpass
+            escapeshellarg($this->remoteSettings->localdbhost),
+            escapeshellarg($this->remoteSettings->localdbname),
+            escapeshellarg($this->remoteSettings->localdbuser),
+            escapeshellarg($this->remoteSettings->localdbpass)
         );
         exec($cmd);
     }
@@ -122,6 +122,9 @@ class Mirror
             $remote,
             $local
         );
+
+        exec($cmd);
+
     }
 
     /**
